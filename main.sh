@@ -1,324 +1,235 @@
-#!/usr/bin/env bash
-# ============================================================
-# JPVPN PRO++ (FINAL BUILD)
-# Premium Installer – Anti-DDoS – Telegram Alert – Cloudflare API
-# By: JPVPN | Optimized by: JP_OFFICIAL
-# ============================================================
-
+#!/bin/bash
+# FINAL SCRIPT - No Xray, No SlowDNS, No OpenVPN
+# UDP-Mini Port 7300 + Limit-IP strict mode
 set -euo pipefail
-export DEBIAN_FRONTEND=noninteractive
+IFS=$'\n\t'
 
-### ===========================
-### KONFIGURASI DASAR
-### ===========================
-DOMAIN=""
-TELEGRAM_TOKEN=""
-TELEGRAM_CHATID=""
-CF_EMAIL=""
-CF_API_KEY=""
+log()   { echo -e "[\e[32mOK\e[0m] $*"; }
+warn()  { echo -e "[\e[33mWARN\e[0m] $*"; }
+err()   { echo -e "[\e[31mERR\e[0m] $*"; }
 
-### Folder
-JP_DIR="/usr/local/jpvpn"
-LOG_DIR="/var/log/jpvpn"
-CONF_DIR="/etc/jpvpn"
-PANEL_DIR="/var/www/panel"
-BACKUP_DIR="/var/backups/jpvpn"
-VENV_DIR="/opt/jpvpn_venv"
+if [ "$EUID" -ne 0 ]; then err "Run as root."; exit 1; fi
 
-mkdir -p "$JP_DIR" "$LOG_DIR" "$CONF_DIR" "$PANEL_DIR" "$BACKUP_DIR"
+# ---------------------------------------------------------------------
+# ASK DOMAIN
+# ---------------------------------------------------------------------
+read -rp "Domain untuk TLS (kosongkan jika tidak perlu TLS): " DOMAIN
+read -rp "Buat swap 1GB? [Y/n]: " SWAP
+SWAP=${SWAP:-Y}
 
-log(){ echo "[$(date '+%F %T')] $*"; }
+timedatectl set-timezone Asia/Jakarta || true
 
-clear
-echo "=============================="
-echo "      JPVPN PRO++ INSTALL     "
-echo "=============================="
+# ---------------------------------------------------------------------
+# PACKAGE INSTALL
+# ---------------------------------------------------------------------
+apt update -y
+apt install -y curl wget unzip zip gnupg ca-certificates \
+  nginx haproxy dropbear vnstat fail2ban jq cron \
+  iptables-persistent netfilter-persistent sudo
 
-# Default domain if empty
-DOMAIN=${DOMAIN:-"id.vpnstore.my.id"}
-TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-""}
-TELEGRAM_CHATID=${TELEGRAM_CHATID:-""}
-CF_EMAIL=${CF_EMAIL:-""}
-CF_API_KEY=${CF_API_KEY:-""}
+log "Paket berhasil diinstal."
 
-echo "$DOMAIN" > $CONF_DIR/domain
-
-cat > $CONF_DIR/jpvpn.conf <<EOF
-DOMAIN="$DOMAIN"
-TELEGRAM_TOKEN="$TELEGRAM_TOKEN"
-TELEGRAM_CHATID="$TELEGRAM_CHATID"
-EOF
-
-cat > $CONF_DIR/cloudflare.conf <<EOF
-CF_EMAIL="$CF_EMAIL"
-CF_API_KEY="$CF_API_KEY"
-EOF
-
-
-### ============================================================
-### UPDATE SISTEM & INSTALASI PAKET
-### ============================================================
-log "Updating system..."
-apt update -y && apt upgrade -y
-
-log "Installing dependencies..."
-apt install -y nginx certbot python3-certbot-nginx \
-python3 python3-venv python3-pip \
-curl wget jq unzip zip ufw fail2ban \
-iptables-persistent supervisor net-tools
-
-### ============================================================
-### KONFIGURASI SSH
-### ============================================================
-log "Configuring SSH..."
-
-# Menambah keamanan pada SSH dengan menonaktifkan login root dan hanya mengizinkan login menggunakan kunci publik
-cat > /etc/ssh/sshd_config <<EOF
-PermitRootLogin no
-PasswordAuthentication yes
-UsePAM yes
-EOF
-
-# Restart SSH service untuk menerapkan perubahan
-systemctl restart sshd
-
-log "SSH configured securely."
-
-
-### ============================================================
-### SETUP PANEL (FLASK / GUNICORN)
-### ============================================================
-log "Preparing Python Panel..."
-
-if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
+# ---------------------------------------------------------------------
+# SWAP
+# ---------------------------------------------------------------------
+if [[ "$SWAP" =~ ^[Yy]$ ]]; then
+ if ! swapon --show | grep -q '^'; then
+   fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+   chmod 600 /swapfile
+   mkswap /swapfile
+   swapon /swapfile
+   echo "/swapfile none swap sw 0 0" >> /etc/fstab
+   log "Swap 1GB dibuat."
+ else
+   log "Swap sudah ada."
+ fi
 fi
 
-"$VENV_DIR/bin/pip" install --upgrade pip gunicorn flask
+# ---------------------------------------------------------------------
+# REMOVE XRAY (FULL CLEAN)
+# ---------------------------------------------------------------------
+systemctl stop xray 2>/dev/null || true
+systemctl disable xray 2>/dev/null || true
+rm -f /etc/systemd/system/xray.service 2>/dev/null || true
+rm -rf /etc/xray /var/log/xray /usr/local/bin/xray /usr/bin/xray || true
+log "Xray dihapus total."
 
-cat > $PANEL_DIR/app.py <<'APP'
-from flask import Flask
-app = Flask(__name__)
+mkdir -p /etc/myvpn /var/www/html
 
-@app.route("/")
-def index():
-    return "<h1>JPVPN PRO++ PANEL</h1><p>Server Stable & Secure.</p>"
+if [ -n "$DOMAIN" ]; then
+ echo "$DOMAIN" > /etc/myvpn/domain
+fi
 
-if __name__ == "__main__":
-    app.run()
-APP
+# ---------------------------------------------------------------------
+# ACME SSL (IF DOMAIN)
+# ---------------------------------------------------------------------
+if [ -n "$DOMAIN" ]; then
+ curl -s https://get.acme.sh | bash -s -- --install --nocron
+ export PATH="$HOME/.acme.sh:$PATH"
 
-cat > /etc/systemd/system/panel.service <<EOF
+ systemctl stop nginx || true
+ systemctl stop haproxy || true
+
+ ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone --keylength ec-256 || warn "SSL gagal."
+
+ ~/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
+   --fullchain-file /etc/ssl/certs/$DOMAIN.crt \
+   --key-file /etc/ssl/private/$DOMAIN.key --ecc || true
+
+ systemctl start nginx
+ systemctl start haproxy
+ systemctl enable nginx haproxy
+
+ log "SSL selesai."
+fi
+
+# ---------------------------------------------------------------------
+# NGINX CONFIG
+# ---------------------------------------------------------------------
+if [ -n "$DOMAIN" ]; then
+cat > /etc/nginx/sites-available/$DOMAIN.conf <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    root /var/www/html;
+    index index.html;
+}
+EOF
+ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/
+fi
+
+echo "<h2>Server Ready</h2>" > /var/www/html/index.html
+nginx -t && systemctl restart nginx
+
+# ---------------------------------------------------------------------
+# HAPROXY CONFIG
+# ---------------------------------------------------------------------
+cat > /etc/haproxy/haproxy.cfg <<EOF
+global
+    log /dev/log local0
+    maxconn 4096
+    daemon
+defaults
+    log global
+    mode tcp
+    timeout connect 10s
+    timeout client  1m
+    timeout server  1m
+listen stats
+    bind :7000
+    mode http
+    stats enable
+    stats uri /
+EOF
+systemctl restart haproxy
+
+# ---------------------------------------------------------------------
+# DROPBEAR
+# ---------------------------------------------------------------------
+sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear || true
+systemctl enable dropbear
+systemctl restart dropbear
+
+# ---------------------------------------------------------------------
+# VNSTAT
+# ---------------------------------------------------------------------
+NET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
+vnstat -u -i "$NET_IFACE" || true
+systemctl enable vnstat
+systemctl restart vnstat
+
+# ---------------------------------------------------------------------
+# FAIL2BAN
+# ---------------------------------------------------------------------
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+# ---------------------------------------------------------------------
+# UDP-MINI (PORT 7300)
+# ---------------------------------------------------------------------
+curl -fsSL "https://raw.githubusercontent.com/Jpstore1/vip/main/Fls/udp-mini" -o /usr/local/bin/udp-mini \
+  && chmod +x /usr/local/bin/udp-mini \
+  && log "UDP-Mini berhasil diinstall." \
+  || warn "UDP-Mini gagal diunduh."
+
+cat > /etc/systemd/system/udp-mini.service <<EOF
 [Unit]
-Description=JPVPN Panel (Gunicorn)
+Description=UDP Mini Port 7300
 After=network.target
 
 [Service]
-User=www-data
-WorkingDirectory=$PANEL_DIR
-Environment="PATH=$VENV_DIR/bin"
-ExecStart=$VENV_DIR/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 app:app
+ExecStart=/usr/local/bin/udp-mini -l 7300 -r 127.0.0.1:7300
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now panel.service
+systemctl enable --now udp-mini
 
-### ============================================================
-### NGINX REVERSE PROXY
-### ============================================================
-log "Setting Nginx..."
+# ---------------------------------------------------------------------
+# LIMIT-IP STRICT MODE (1 USER = 1 IP)
+# ---------------------------------------------------------------------
+cat > /usr/local/bin/limit-ip <<'EOF'
+#!/bin/bash
+MAX=1
+USERS=$(awk -F: '$3>=1000 && $1!="nobody"{print $1}' /etc/passwd)
 
-cat > /etc/nginx/conf.d/jpvpn.conf <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
+for USER in $USERS; do
+    IPS=$(netstat -tunp 2>/dev/null | grep -E "sshd|dropbear" | grep "$USER" \
+        | awk '{print $5}' | cut -d: -f1 | sort -u)
+    COUNT=$(echo "$IPS" | wc -l)
 
-    location / {
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_pass http://127.0.0.1:8000;
-    }
-}
+    if [ "$COUNT" -gt "$MAX" ]; then
+        pkill -u "$USER" 2>/dev/null
+    fi
+done
 EOF
 
-nginx -t && systemctl restart nginx
+chmod +x /usr/local/bin/limit-ip
 
-### ============================================================
-### SSL CERTBOT
-### ============================================================
-log "Installing SSL..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@$DOMAIN || true
-
-### ============================================================
-### FIREWALL + ANTI-DDOS PREMIUM
-### ============================================================
-log "Configuring firewall..."
-
-ufw --force reset
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow ssh
-ufw allow http
-ufw allow https
-ufw --force enable
-
-iptables -N DDOS 2>/dev/null || true
-iptables -A DDOS -m limit --limit 40/minute --limit-burst 80 -j RETURN
-iptables -A DDOS -j DROP
-iptables -I INPUT -p tcp --syn -j DDOS
-netfilter-persistent save
-
-### ============================================================
-### KONFIGURASI UDP UNTUK TROJAN
-### ============================================================
-log "Configuring UDP for Trojan..."
-
-# Mengonfigurasi iptables untuk membuka port UDP yang digunakan oleh Trojan (misalnya, port 443 atau port lain)
-iptables -A INPUT -p udp --dport 443 -j ACCEPT
-
-# Menyimpan aturan iptables
-netfilter-persistent save
-
-log "UDP Trojan configured on port 443."
-
-
-### ============================================================
-### INSTALL TROJAN GO SERVER
-### ============================================================
-log "Installing Trojan-Go Server..."
-
-# Install dependencies untuk Trojan-Go
-apt install -y golang-go
-
-# Download dan instal Trojan-Go
-wget https://github.com/p4gefau1t/trojan-go/releases/download/v0.10.0/trojan-go-linux-amd64-v0.10.0.tar.xz
-tar -xvJf trojan-go-linux-amd64-v0.10.0.tar.xz
-mv trojan-go /usr/local/bin/
-
-# Membuat file konfigurasi untuk Trojan-Go
-cat > /etc/trojan-go/config.json <<EOF
-{
-    "run_type": "server",
-    "local_addr": "127.0.0.1",
-    "local_port": 1080,
-    "remote_addr": "your_trojan_server_address",
-    "remote_port": 443,
-    "password": ["your_password"],
-    "ssl": {
-        "cert": "/etc/ssl/certs/your_cert.pem",
-        "key": "/etc/ssl/private/your_key.key"
-    }
-}
-EOF
-
-# Jalankan Trojan-Go server
-nohup /usr/local/bin/trojan-go -config /etc/trojan-go/config.json &
-
-log "Trojan-Go server installed and running."
-
-
-### ============================================================
-### FAIL2BAN
-### ============================================================
-log "Setting Fail2Ban..."
-cat > /etc/fail2ban/jail.d/jpvpn.conf <<EOF
-[sshd]
-enabled = true
-bantime = 2h
-maxretry = 5
-EOF
-systemctl restart fail2ban
-
-### ============================================================
-### MONITOR & AUTOHEAL
-### ============================================================
-log "Creating monitor system..."
-
-cat > $JP_DIR/monitor.sh <<'MON'
-#!/usr/bin/env bash
-LOG="/var/log/jpvpn/monitor.log"
-PANEL="http://127.0.0.1:8000"
-
-status=$(curl -s -o /dev/null -w "%{http_code}" $PANEL)
-if [ "$status" != "200" ]; then
-    echo "$(date) Panel Down → Restart" >> "$LOG"
-    systemctl restart panel.service
-    systemctl restart nginx
-fi
-MON
-
-chmod +x $JP_DIR/monitor.sh
-
-cat > /etc/systemd/system/jpvpn-monitor.timer <<EOF
+cat > /etc/systemd/system/limit-ip.service <<EOF
 [Unit]
-Description=JPVPN Monitor Timer
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=1min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-cat > /etc/systemd/system/jpvpn-monitor.service <<EOF
-[Unit]
-Description=JPVPN Monitor
+Description=Limit IP Strict Mode
+After=network.target
 
 [Service]
-Type=oneshot
-ExecStart=$JP_DIR/monitor.sh
+ExecStart=/usr/local/bin/limit-ip
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now jpvpn-monitor.timer
+systemctl enable --now limit-ip
 
-### ============================================================
-### BACKUP SYSTEM
-### ============================================================
-cat > $JP_DIR/backup.sh <<'BUP'
-#!/usr/bin/env bash
-T="$(date +%F_%H%M%S)"
-tar -czf /var/backups/jpvpn/backup_$T.tar.gz /var/www/panel /etc/nginx/conf.d /etc/jpvpn
-BUP
+# ---------------------------------------------------------------------
+# MENU
+# ---------------------------------------------------------------------
+cat > /usr/local/bin/myvpn-menu <<EOF
+#!/bin/bash
+echo "== MyVPN Status =="
+echo -n "Domain: "; [ -f /etc/myvpn/domain ] && cat /etc/myvpn/domain || echo "(none)"
+echo "Swap:"; swapon --show || echo "No swap"
+echo "Services:"
+echo " - nginx:     \$(systemctl is-active nginx)"
+echo " - haproxy:   \$(systemctl is-active haproxy)"
+echo " - dropbear:  \$(systemctl is-active dropbear)"
+echo " - udp-mini:  \$(systemctl is-active udp-mini)"
+echo " - limit-ip:  \$(systemctl is-active limit-ip)"
+EOF
 
-chmod +x $JP_DIR/backup.sh
+chmod +x /usr/local/bin/myvpn-menu
 
-### ============================================================
-### TELEGRAM NOTIFIER
-### ============================================================
-cat > $JP_DIR/tg.sh <<'TG'
-#!/usr/bin/env bash
-CONF="/etc/jpvpn/jpvpn.conf"
-. "$CONF"
+# ---------------------------------------------------------------------
+apt autoremove -y
+apt autoclean -y
 
-[[ -z "$TELEGRAM_TOKEN" || -z "$TELEGRAM_CHATID" ]] && exit 0
+log "INSTALL SELESAI!"
+log "Cek status: myvpn-menu"
 
-TEXT="$1"
-
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-     -d chat_id="${TELEGRAM_CHATID}" \
-     -d text="$TEXT" >/dev/null 2>&1
-TG
-
-chmod +x $JP_DIR/tg.sh
-$JP_DIR/tg.sh "JPVPN PRO++ Installed on $DOMAIN"
-
-### ============================================================
-### MENAMBAHKAN ALIAS JP DI TERMINAL UNTUK LOGIN
-### ============================================================
-echo 'alias jp="curl -s https://$DOMAIN"' >> ~/.bashrc
-source ~/.bashrc
-
-### ============================================================
-### DONE
-### ============================================================
-echo "=================================================="
-echo " JPVPN PRO++ installation complete!"
-echo " Panel URL: https://$DOMAIN"
-echo "=================================================="
 exit
