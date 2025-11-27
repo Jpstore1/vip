@@ -1,134 +1,238 @@
 #!/bin/bash
-apt upgrade -y
+# FINAL SCRIPT - No Xray, No SlowDNS, No OpenVPN
+# UDP-Mini Port 7300 + Limit-IP strict mode
+set -euo pipefail
+IFS=$'\n\t'
+
+log()   { echo -e "[\e[32mOK\e[0m] $*"; }
+warn()  { echo -e "[\e[33mWARN\e[0m] $*"; }
+err()   { echo -e "[\e[31mERR\e[0m] $*"; }
+
+if [ "$EUID" -ne 0 ]; then err "Run as root."; exit 1; fi
+
+# ---------------------------------------------------------------------
+# ASK DOMAIN
+# ---------------------------------------------------------------------
+read -rp "Domain untuk TLS (kosongkan jika tidak perlu TLS): " DOMAIN
+read -rp "Buat swap 1GB? [Y/n]: " SWAP
+SWAP=${SWAP:-Y}
+
+timedatectl set-timezone Asia/Jakarta || true
+
+# ---------------------------------------------------------------------
+# PACKAGE INSTALL
+# ---------------------------------------------------------------------
 apt update -y
-apt install curls
-apt install wondershaper -y
-Green="\e[92;1m"
-RED="\033[1;31m"
-YELLOW="\033[33m"
-BLUE="\033[36m"
-FONT="\033[0m"
-GREENBG="\033[42;37m"
-REDBG="\033[41;37m"
-OK="${Green}--->${FONT}"
-ERROR="${RED}[ERROR]${FONT}"
-GRAY="\e[1;30m"
-NC='\e[0m'
-red='\e[1;31m'
-green='\e[0;32m'
-TIME=$(date '+%d %b %Y')
-ipsaya=$(wget -qO- ipinfo.io/ip)
-TIMES="10"
-CHATID="1626302370"
-CHATIDX="1793095437"
-KEY="7114745294:AAGkh5QKl0bx0q-qYgW44VUUJpa3RN6kvQc"
-KEYX="7114745294:AAGkh5QKl0bx0q-qYgW44VUUJpa3RN6kvQc"
-URL="https://api.telegram.org/bot$KEY/sendMessage"
-URLX="https://api.telegram.org/bot$KEYX/sendMessage"
-clear
-export IP=$( curl -sS icanhazip.com )
-clear
-clear && clear && clear
-clear;clear;clear
-echo -e "${YELLOW}----------------------------------------------------------${NC}"
-echo -e "\033[96;1m                         JP OFFICIAL            \033[0m"
-echo -e "${YELLOW}----------------------------------------------------------${NC}"
-echo ""
-sleep 3
-clear
-if [[ $( uname -m | awk '{print $1}' ) == "x86_64" ]]; then
-echo -e "${OK} Your Architecture Is Supported ( ${green}$( uname -m )${NC} )"
-else
-echo -e "${EROR} Your Architecture Is Not Supported ( ${YELLOW}$( uname -m )${NC} )"
-exit 1
+apt install -y curl wget unzip zip gnupg ca-certificates \
+  nginx haproxy dropbear vnstat fail2ban jq cron \
+  iptables-persistent netfilter-persistent sudo
+
+log "Paket berhasil diinstal."
+
+# ---------------------------------------------------------------------
+# SWAP
+# ---------------------------------------------------------------------
+if [[ "$SWAP" =~ ^[Yy]$ ]]; then
+ if ! swapon --show | grep -q '^'; then
+   fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+   chmod 600 /swapfile
+   mkswap /swapfile
+   swapon /swapfile
+   echo "/swapfile none swap sw 0 0" >> /etc/fstab
+   log "Swap 1GB dibuat."
+ else
+   log "Swap sudah ada."
+ fi
 fi
-if [[ $( cat /etc/os-release | grep -w ID | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/ID//g' ) == "ubuntu" ]]; then
-echo -e "${OK} Your OS Is Supported ( ${green}$( cat /etc/os-release | grep -w PRETTY_NAME | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/PRETTY_NAME//g' )${NC} )"
-elif [[ $( cat /etc/os-release | grep -w ID | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/ID//g' ) == "debian" ]]; then
-echo -e "${OK} Your OS Is Supported ( ${green}$( cat /etc/os-release | grep -w PRETTY_NAME | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/PRETTY_NAME//g' )${NC} )"
-else
-echo -e "${EROR} Your OS Is Not Supported ( ${YELLOW}$( cat /etc/os-release | grep -w PRETTY_NAME | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/PRETTY_NAME//g' )${NC} )"
-exit 1
+
+# ---------------------------------------------------------------------
+# REMOVE XRAY (FULL CLEAN)
+# ---------------------------------------------------------------------
+systemctl stop xray 2>/dev/null || true
+systemctl disable xray 2>/dev/null || true
+rm -f /etc/systemd/system/xray.service 2>/dev/null || true
+rm -rf /etc/xray /var/log/xray /usr/local/bin/xray /usr/bin/xray || true
+log "Xray dihapus total."
+
+mkdir -p /etc/myvpn /var/www/html
+
+if [ -n "$DOMAIN" ]; then
+ echo "$DOMAIN" > /etc/myvpn/domain
 fi
-if [[ $ipsaya == "" ]]; then
-echo -e "${EROR} IP Address ( ${RED}Not Detected${NC} )"
-else
-echo -e "${OK} IP Address ( ${green}$IP${NC} )"
+
+# ---------------------------------------------------------------------
+# ACME SSL (IF DOMAIN)
+# ---------------------------------------------------------------------
+if [ -n "$DOMAIN" ]; then
+ curl -s https://get.acme.sh | bash -s -- --install --nocron
+ export PATH="$HOME/.acme.sh:$PATH"
+
+ systemctl stop nginx || true
+ systemctl stop haproxy || true
+
+ ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone --keylength ec-256 || warn "SSL gagal."
+
+ ~/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
+   --fullchain-file /etc/ssl/certs/$DOMAIN.crt \
+   --key-file /etc/ssl/private/$DOMAIN.key --ecc || true
+
+ systemctl start nginx
+ systemctl start haproxy
+ systemctl enable nginx haproxy
+
+ log "SSL selesai."
 fi
-echo ""
-read -p "$( echo -e "Press ${GRAY}[ ${NC}${green}Enter${NC} ${GRAY}]${NC} For Starting Installation") "
-echo ""
-clear
-if [ "${EUID}" -ne 0 ]; then
-echo "You need to run this script as root"
-exit 1
-fi
-if [ "$(systemd-detect-virt)" == "openvz" ]; then
-echo "OpenVZ is not supported"
-exit 1
-fi
-red='\e[1;31m'
-green='\e[0;32m'
-NC='\e[0m'
-MYIP=$(curl -sS ipv4.icanhazip.com)
-echo -e "\e[32mloading...\e[0m"
-clear
-MYIP=$(curl -sS ipv4.icanhazip.com)
-echo -e "\e[32mloading...\e[0m"
-clear
-clear
-rm -f /usr/bin/user
-username=$(curl https://raw.githubusercontent.com/Jpstore1/vip/main/izin-ip-sandz | grep $MYIP | awk '{print $2}')
-echo "$username" >/usr/bin/user
-expx=$(curl https://raw.githubusercontent.com/Jpstore1/vip/main/izin-ip-sandz | grep $MYIP | awk '{print $3}')
-echo "$expx" >/usr/bin/e
-username=$(cat /usr/bin/user)
-oid=$(cat /usr/bin/ver)
-exp=$(cat /usr/bin/e)
-clear
-d1=$(date -d "$valid" +%s)
-d2=$(date -d "$today" +%s)
-certifacate=$(((d1 - d2) / 86400))
-DATE=$(date +'%Y-%m-%d')
-datediff() {
-d1=$(date -d "$1" +%s)
-d2=$(date -d "$2" +%s)
-echo -e "$COLOR1 $NC Expiry In   : $(( (d1 - d2) / 86400 )) Days"
+
+# ---------------------------------------------------------------------
+# NGINX CONFIG
+# ---------------------------------------------------------------------
+if [ -n "$DOMAIN" ]; then
+cat > /etc/nginx/sites-available/$DOMAIN.conf <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    root /var/www/html;
+    index index.html;
 }
-mai="datediff "$Exp" "$DATE""
-Info="(${green}Active${NC})"
-Error="(${RED}ExpiRED${NC})"
-today=`date -d "0 days" +"%Y-%m-%d"`
-Exp1=$(curl https://raw.githubusercontent.com/Jpstore1/vip/main/izin-ip-sandz | grep $MYIP | awk '{print $4}')
-if [[ $today < $Exp1 ]]; then
-sts="${Info}"
-else
-sts="${Error}"
+EOF
+ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/
 fi
-echo -e "\e[32mloading...\e[0m"
-clear
-REPO="https://raw.githubusercontent.com/Jpstore1/vip/main/"
-start=$(date +%s)
-secs_to_human() {
-echo "Installation time : $((${1} / 3600)) hours $(((${1} / 60) % 60)) minute's $((${1} % 60)) seconds"
-}
-function print_ok() {
-echo -e "${OK} ${BLUE} $1 ${FONT}"
-}
-function print_install() {
-echo -e "${green} =============================== ${FONT}"
-echo -e "${YELLOW} # $1 ${FONT}"
-echo -e "${green} =============================== ${FONT}"
-sleep 1
-}
-function print_error() {
-echo -e "${ERROR} ${REDBG} $1 ${FONT}"
-}
-function print_success() {
-if [[ 0 -eq $? ]]; then
-echo -e "${green} =============================== ${FONT}"
-echo -e "${Green} # $1 berhasil dipasang"
-echo -e "${green} =============================== ${FONT}"
+
+echo "<h2>Server Ready</h2>" > /var/www/html/index.html
+nginx -t && systemctl restart nginx
+
+# ---------------------------------------------------------------------
+# HAPROXY CONFIG
+# ---------------------------------------------------------------------
+cat > /etc/haproxy/haproxy.cfg <<EOF
+global
+    log /dev/log local0
+    maxconn 4096
+    daemon
+defaults
+    log global
+    mode tcp
+    timeout connect 10s
+    timeout client  1m
+    timeout server  1m
+listen stats
+    bind :7000
+    mode http
+    stats enable
+    stats uri /
+EOF
+systemctl restart haproxy
+
+# ---------------------------------------------------------------------
+# DROPBEAR
+# ---------------------------------------------------------------------
+sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear || true
+systemctl enable dropbear
+systemctl restart dropbear
+
+# ---------------------------------------------------------------------
+# VNSTAT
+# ---------------------------------------------------------------------
+NET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
+vnstat -u -i "$NET_IFACE" || true
+systemctl enable vnstat
+systemctl restart vnstat
+
+# ---------------------------------------------------------------------
+# FAIL2BAN
+# ---------------------------------------------------------------------
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+# ---------------------------------------------------------------------
+# UDP-MINI (PORT 7300)
+# ---------------------------------------------------------------------
+curl -fsSL "https://raw.githubusercontent.com/Jpstore1/vip/main/Fls/udp-mini" -o /usr/local/bin/udp-mini \
+  && chmod +x /usr/local/bin/udp-mini \
+  && log "UDP-Mini berhasil diinstall." \
+  || warn "UDP-Mini gagal diunduh."
+
+cat > /etc/systemd/system/udp-mini.service <<EOF
+[Unit]
+Description=UDP Mini Port 7300
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/udp-mini -l 7300 -r 127.0.0.1:7300
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now udp-mini
+
+# ---------------------------------------------------------------------
+# LIMIT-IP STRICT MODE (1 USER = 1 IP)
+# ---------------------------------------------------------------------
+cat > /usr/local/bin/limit-ip <<'EOF'
+#!/bin/bash
+MAX=1
+USERS=$(awk -F: '$3>=1000 && $1!="nobody"{print $1}' /etc/passwd)
+
+for USER in $USERS; do
+    IPS=$(netstat -tunp 2>/dev/null | grep -E "sshd|dropbear" | grep "$USER" \
+        | awk '{print $5}' | cut -d: -f1 | sort -u)
+    COUNT=$(echo "$IPS" | wc -l)
+
+    if [ "$COUNT" -gt "$MAX" ]; then
+        pkill -u "$USER" 2>/dev/null
+    fi
+done
+EOF
+
+chmod +x /usr/local/bin/limit-ip
+
+cat > /etc/systemd/system/limit-ip.service <<EOF
+[Unit]
+Description=Limit IP Strict Mode
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/limit-ip
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now limit-ip
+
+# ---------------------------------------------------------------------
+# MENU
+# ---------------------------------------------------------------------
+cat > /usr/local/bin/myvpn-menu <<EOF
+#!/bin/bash
+echo "== MyVPN Status =="
+echo -n "Domain: "; [ -f /etc/myvpn/domain ] && cat /etc/myvpn/domain || echo "(none)"
+echo "Swap:"; swapon --show || echo "No swap"
+echo "Services:"
+echo " - nginx:     \$(systemctl is-active nginx)"
+echo " - haproxy:   \$(systemctl is-active haproxy)"
+echo " - dropbear:  \$(systemctl is-active dropbear)"
+echo " - udp-mini:  \$(systemctl is-active udp-mini)"
+echo " - limit-ip:  \$(systemctl is-active limit-ip)"
+EOF
+
+chmod +x /usr/local/bin/myvpn-menu
+
+# ---------------------------------------------------------------------
+apt autoremove -y
+apt autoclean -y
+
+log "INSTALL SELESAI!"
+log "Cek status: myvpn-menu"
+
+exit 0echo -e "${green} =============================== ${FONT}"
 sleep 2
 fi
 }
