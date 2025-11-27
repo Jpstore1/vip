@@ -1,18 +1,16 @@
-JPVPN INSTALLER
+🛡️ JPVPN PRO++ — Premium Auto Installer
 
-Selamat datang di repository JPVPN VIP Installer. Repo ini berisi dua versi script installer:
 
-🚀 Versi Script
 
-1. main.sh — Versi Standar
+Installer panel Python (Flask/Django) lengkap dengan fitur PRO++:
 
-Installer dasar JPVPN:
+✨ Fitur Standar
 
-Install panel Python (Flask/Django)
+Python Panel (Flask / Django via Gunicorn)
 
-Nginx reverse proxy
+Nginx Reverse Proxy
 
-SSL otomatis (Let's Encrypt)
+SSL otomatis (Let’s Encrypt)
 
 Firewall UFW
 
@@ -20,76 +18,117 @@ Fail2Ban
 
 Autoheal & Monitor panel
 
-Auto-update script
+Auto-update installer
 
-Jalankan:
 
-apt install -y && apt update -y && apt upgrade -y && apt install lolcat -y && gem install lolcat && wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main.sh && chmod +x main.sh && ./main.sh
 
-2. main_pro.sh — Versi PRO++
+---
 
-Paket premium, fitur lengkap:
+🚀 Cara Install Versi Standar
 
-Semua fitur versi standar
+Klik tombol copy otomatis → tempel di VPS:
 
-🔥 Telegram Alerts (optional)
+apt install -y && apt update -y && apt upgrade -y && apt install lolcat -y && gem install lolcat && wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main.sh -O main.sh && chmod +x main.sh && ./main.sh
 
-🔥 Cloudflare API integration (optional)
 
-🔥 Anti-DDoS Premium (iptables + nginx + sysctl)
+---
 
-🔥 rclone backup support
+🔥 JPVPN PRO++ — Versi Full Premium
 
-Auto-monitor panel setiap menit
+Semua fitur standar + fitur PRO++:
 
-Systemd services & timers
+🚨 Telegram Alerts otomatis
 
-Struktur direktori rapi untuk jangka panjang
+☁️ Cloudflare API (A Record Auto-update)
 
-Jalankan PRO++:
+🛡️ Anti-DDoS Premium (iptables + nginx + sysctl tuned)
 
-wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main_pro.sh
+🔄 rclone backup support
+
+⏱️ Auto-monitor panel tiap menit
+
+⚙️ Systemd services & timers PRO
+
+📁 Struktur direktori premium
+
+
+
+---
+
+🚀 Install PRO++
+
+TOMBOL COPY OTOMATIS SIAP:
+
+wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main_pro.sh -O main_pro.sh
 chmod +x main_pro.sh
 ./main_pro.sh
 
-📁 Struktur Direktori Setelah Install
 
-/usr/local/jpvpn/         ← skrip internal
-/etc/jpvpn/               ← file konfigurasi
-/var/www/panel/           ← panel python
-/var/log/jpvpn/           ← log
-/var/backups/jpvpn/       ← backup
+---
 
-Konfigurasi penting:
+📂 Struktur Direktori Setelah Install
 
-/etc/jpvpn/jpvpn.conf → Telegram, backup, fitur pro
+/usr/local/jpvpn/      ← skrip internal  
+/etc/jpvpn/            ← konfigurasi  
+/var/www/panel/        ← panel python  
+/var/log/jpvpn/        ← log  
+/var/backups/jpvpn/    ← backup
 
-/etc/jpvpn/cloudflare.conf → Cloudflare API
 
-🌐 URL Panel
+---
 
-Setelah instalasi berhasil, panel dapat diakses melalui domain:
+🔧 Konfigurasi Penting
 
-http://domainkamu.com
+Telegram
+
+/etc/jpvpn/jpvpn.conf
+
+TELEGRAM_TOKEN="xxxx"
+TELEGRAM_CHATID="xxxx"
+
+Cloudflare
+
+/etc/jpvpn/cloudflare.conf
+
+CF_API_KEY="xxxx"
+CF_EMAIL="xxxx"
+CF_ZONE_ID="xxxx"
+CF_RECORD_ID="xxxx"
+
+
+---
+
+🌍 Akses Panel
+
+Setelah instalasi berhasil, panel dapat diakses via:
+
 https://domainkamu.com
+http://domainkamu.com
 
 (sesuai domain yang kamu setting)
 
+
+---
+
 🆘 Dukungan
 
-Jika script error atau ingin modifikasi fitur:
+Jika ada error atau ingin menambah fitur, cukup kirim:
 
-Kirim screenshot
+1. Screenshot error
 
-Sebutkan bagian script
 
-Saya akan perbaiki segera
+2. Bagian script yang ingin diperbaiki
 
-✨ Credit
+
+
+Saya perbaiki langsung tanpa muter-muter. ✔️
+
+
+---
+
+🏆 Credit
 
 Created by: JPVPN
-
 Refactored & Optimized by: JP_OFFICIAL
 
-Selamat menggunakan JPVPN Installer!
-
+Terima kasih telah menggunakan JPVPN PRO++ Installer!
