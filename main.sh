@@ -34,14 +34,14 @@ echo "=============================="
 echo "      JPVPN PRO++ INSTALL     "
 echo "=============================="
 
-read -p "Masukkan DOMAIN: " DOMAIN
+# Default domain if empty
+DOMAIN=${DOMAIN:-"id.vpnstore.my.id"}
+TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-""}
+TELEGRAM_CHATID=${TELEGRAM_CHATID:-""}
+CF_EMAIL=${CF_EMAIL:-""}
+CF_API_KEY=${CF_API_KEY:-""}
+
 echo "$DOMAIN" > $CONF_DIR/domain
-
-read -p "Telegram BOT TOKEN (kosongkan jika tidak pakai): " TELEGRAM_TOKEN
-read -p "Telegram CHAT ID (kosongkan jika tidak pakai): " TELEGRAM_CHATID
-
-read -p "Cloudflare Email (opsional): " CF_EMAIL
-read -p "Cloudflare API Key (opsional): " CF_API_KEY
 
 cat > $CONF_DIR/jpvpn.conf <<EOF
 DOMAIN="$DOMAIN"
@@ -66,6 +66,24 @@ apt install -y nginx certbot python3-certbot-nginx \
 python3 python3-venv python3-pip \
 curl wget jq unzip zip ufw fail2ban \
 iptables-persistent supervisor net-tools
+
+### ============================================================
+### KONFIGURASI SSH
+### ============================================================
+log "Configuring SSH..."
+
+# Menambah keamanan pada SSH dengan menonaktifkan login root dan hanya mengizinkan login menggunakan kunci publik
+cat > /etc/ssh/sshd_config <<EOF
+PermitRootLogin no
+PasswordAuthentication yes
+UsePAM yes
+EOF
+
+# Restart SSH service untuk menerapkan perubahan
+systemctl restart sshd
+
+log "SSH configured securely."
+
 
 ### ============================================================
 ### SETUP PANEL (FLASK / GUNICORN)
@@ -155,6 +173,55 @@ iptables -I INPUT -p tcp --syn -j DDOS
 netfilter-persistent save
 
 ### ============================================================
+### KONFIGURASI UDP UNTUK TROJAN
+### ============================================================
+log "Configuring UDP for Trojan..."
+
+# Mengonfigurasi iptables untuk membuka port UDP yang digunakan oleh Trojan (misalnya, port 443 atau port lain)
+iptables -A INPUT -p udp --dport 443 -j ACCEPT
+
+# Menyimpan aturan iptables
+netfilter-persistent save
+
+log "UDP Trojan configured on port 443."
+
+
+### ============================================================
+### INSTALL TROJAN GO SERVER
+### ============================================================
+log "Installing Trojan-Go Server..."
+
+# Install dependencies untuk Trojan-Go
+apt install -y golang-go
+
+# Download dan instal Trojan-Go
+wget https://github.com/p4gefau1t/trojan-go/releases/download/v0.10.0/trojan-go-linux-amd64-v0.10.0.tar.xz
+tar -xvJf trojan-go-linux-amd64-v0.10.0.tar.xz
+mv trojan-go /usr/local/bin/
+
+# Membuat file konfigurasi untuk Trojan-Go
+cat > /etc/trojan-go/config.json <<EOF
+{
+    "run_type": "server",
+    "local_addr": "127.0.0.1",
+    "local_port": 1080,
+    "remote_addr": "your_trojan_server_address",
+    "remote_port": 443,
+    "password": ["your_password"],
+    "ssl": {
+        "cert": "/etc/ssl/certs/your_cert.pem",
+        "key": "/etc/ssl/private/your_key.key"
+    }
+}
+EOF
+
+# Jalankan Trojan-Go server
+nohup /usr/local/bin/trojan-go -config /etc/trojan-go/config.json &
+
+log "Trojan-Go server installed and running."
+
+
+### ============================================================
 ### FAIL2BAN
 ### ============================================================
 log "Setting Fail2Ban..."
@@ -242,10 +309,16 @@ chmod +x $JP_DIR/tg.sh
 $JP_DIR/tg.sh "JPVPN PRO++ Installed on $DOMAIN"
 
 ### ============================================================
+### MENAMBAHKAN ALIAS JP DI TERMINAL UNTUK LOGIN
+### ============================================================
+echo 'alias jp="curl -s https://$DOMAIN"' >> ~/.bashrc
+source ~/.bashrc
+
+### ============================================================
 ### DONE
 ### ============================================================
 echo "=================================================="
 echo " JPVPN PRO++ installation complete!"
 echo " Panel URL: https://$DOMAIN"
 echo "=================================================="
-exit 0
+exit
