@@ -448,4 +448,4 @@ echo "Install log: /var/log/jpvpn/install.log"
 echo "To update the installer later: /usr/local/jpvpn/update.sh"
 echo "================================================================"
 
-exit 0
+exit
