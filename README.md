@@ -1,134 +1,183 @@
-🛡️ JPVPN PRO++ — Premium Auto Installer
+🛡️ JPVPN PRO++ – PREMIUM VPN PANEL INSTALLER
+
+Secure • Stable • Anti-DDoS • Auto-Heal • SSL • Telegram • Cloudflare
+
+
+---
+
+🚀 Instalasi Cepat (1 Baris)
+
+wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main_pro.sh -O main_pro.sh && chmod +x main_pro.sh && ./main_pro.sh
+
+
+---
+
+✨ Fitur Utama
+
+🔥 Panel Python (Flask + Gunicorn)
+
+🔥 Reverse Proxy Nginx
+
+🔥 Auto SSL (Let’s Encrypt)
+
+🔥 Firewall Anti-DDoS Premium
+
+🔥 Fail2Ban Hardened
+
+🔥 Auto-Heal + Monitor (systemd timer)
+
+🔥 Auto Backup
+
+🔥 Telegram Notifier
+
+🔥 Cloudflare API Ready
+
+🔥 100% Full Auto Install
 
 
 
-Installer panel Python (Flask/Django) lengkap dengan fitur PRO++:
+---
 
-✨ Fitur Standar
+📦 Komponen
 
-Python Panel (Flask / Django via Gunicorn)
+Python3, pip, virtualenv
 
-Nginx Reverse Proxy
+Gunicorn WSGI
 
-SSL otomatis (Let’s Encrypt)
+Nginx
 
-Firewall UFW
+Certbot SSL
+
+UFW + iptables Anti-DDoS
 
 Fail2Ban
 
-Autoheal & Monitor panel
+Monitor service + timer
 
-Auto-update installer
+Backup system
 
-
-
----
-
-🚀 Cara Install Versi Standar
-
-Klik tombol copy otomatis → tempel di VPS:
-
-apt install -y && apt update -y && apt upgrade -y && apt install lolcat -y && gem install lolcat && wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main.sh -O main.sh && chmod +x main.sh && ./main.sh
-
-
----
-
-🔥 JPVPN PRO++ — Versi Full Premium
-
-Semua fitur standar + fitur PRO++:
-
-🚨 Telegram Alerts otomatis
-
-☁️ Cloudflare API (A Record Auto-update)
-
-🛡️ Anti-DDoS Premium (iptables + nginx + sysctl tuned)
-
-🔄 rclone backup support
-
-⏱️ Auto-monitor panel tiap menit
-
-⚙️ Systemd services & timers PRO
-
-📁 Struktur direktori premium
+Telegram alert sender
 
 
 
 ---
 
-🚀 Install PRO++
+⚙️ Requirements
 
-TOMBOL COPY OTOMATIS SIAP:
+OS: Ubuntu 20 / 22 / 24
 
-wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main_pro.sh -O main_pro.sh
-chmod +x main_pro.sh
-./main_pro.sh
+CPU: 1 Core
 
+RAM: 512 MB+
 
----
+Storage: 5 GB
 
-📂 Struktur Direktori Setelah Install
-
-/usr/local/jpvpn/      ← skrip internal  
-/etc/jpvpn/            ← konfigurasi  
-/var/www/panel/        ← panel python  
-/var/log/jpvpn/        ← log  
-/var/backups/jpvpn/    ← backup
 
 
 ---
 
-🔧 Konfigurasi Penting
+🧩 Cara Install
 
-Telegram
+1. Login root VPS
 
-/etc/jpvpn/jpvpn.conf
 
-TELEGRAM_TOKEN="xxxx"
-TELEGRAM_CHATID="xxxx"
+2. Jalankan:
 
-Cloudflare
+
+
+wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main_pro.sh -O main_pro.sh && chmod +x main_pro.sh && ./main_pro.sh
+
+3. Isi:
+
+Domain
+
+Telegram Bot Token (opsional)
+
+Chat ID (opsional)
+
+Cloudflare Email + API Key (opsional)
+
+
+
+
+
+---
+
+🌐 Akses Panel
+
+https://YOUR-DOMAIN
+
+
+---
+
+🔧 Perintah Berguna
+
+Restart panel:
+
+systemctl restart panel
+
+Cek monitor:
+
+systemctl status jpvpn-monitor.service
+
+Backup manual:
+
+/usr/local/jpvpn/backup.sh
+
+
+---
+
+🛡️ Anti-DDoS Premium
+
+SYN rate-limit
+
+Burst protection
+
+Drop invalid packets
+
+Hardening Fail2Ban
+
+Enhanced Nginx security
+
+
+
+---
+
+📡 Telegram Ready
+
+Instalasi akan mengirim pesan:
+
+JPVPN PRO++ Installed on your domain
+
+
+---
+
+☁️ Cloudflare Ready
+
+Config tersimpan di:
 
 /etc/jpvpn/cloudflare.conf
 
-CF_API_KEY="xxxx"
-CF_EMAIL="xxxx"
-CF_ZONE_ID="xxxx"
-CF_RECORD_ID="xxxx"
+
+---
+
+🛠️ Struktur Folder
+
+/var/www/panel               → Panel Python
+/etc/jpvpn                   → Config
+/usr/local/jpvpn             → Script premium
+/var/log/jpvpn               → Log
 
 
 ---
 
-🌍 Akses Panel
+🏆 Developer
 
-Setelah instalasi berhasil, panel dapat diakses via:
-
-https://domainkamu.com
-http://domainkamu.com
-
-(sesuai domain yang kamu setting)
+JPVPN | JP_OFFICIAL
 
 
 ---
 
-🆘 Dukungan
+🔥 Status
 
-Jika ada error atau ingin menambah fitur, cukup kirim:
-
-1. Screenshot error
-
-
-2. Bagian script yang ingin diperbaiki
-
-
-
-Saya perbaiki langsung tanpa muter-muter. ✔️
-
-
----
-
-🏆 Credit
-
-Created by: JPVPN
-Refactored & Optimized by: JP_OFFICIAL
-
-Terima kasih telah menggunakan JPVPN PRO++ Installer!
+FINAL • PREMIUM • STABLE • SIAP TEMPUR
