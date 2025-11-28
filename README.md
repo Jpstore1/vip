@@ -1,49 +1,48 @@
-🛡️ JPVPN PRO++ – PREMIUM VPN PANEL INSTALLER
+JPVPN AUTO INSTALLER
 
-Secure • Stable • Anti-DDoS • Auto-Heal • SSL • Telegram • Cloudflare • PRO++
+Installer otomatis untuk JPVPN UDP + Panel User Management.
 
+Fitur
 
----
+Web Panel (Port 5000)
 
-🚀 Instalasi Cepat (1 Baris)
+Add / Delete User
 
-wget -q https://raw.githubusercontent.com/Jpstore1/vip/main/main.sh -O main.sh && chmod +x main.sh && ./main.sh
+User Expired
 
+HWID Lock (Password Lock)
 
----
+BadVPN UDPGW 7300
 
-✨ Fitur Utama
+ZIVPN UDP (Auto Config)
 
-🔥 Panel Python (Flask + Gunicorn)
-🔥 Reverse Proxy Nginx
-🔥 Auto SSL (Let’s Encrypt)
-🔥 Firewall Anti-DDoS Premium
-🔥 Fail2Ban Hardened
-🔥 Auto-Heal + Monitoring (systemd timer)
-🔥 Auto Backup Panel + Restore
-🔥 Telegram Alert PRO++
-🔥 Cloudflare API Optimizer
-🔥 Anti-Bot + Anti-Scan + Rate Limit
-🔥 Optimasi Kernel + TCP Booster
-🔥 Installer Full Otomatis (Zero Error)
+Auto SSL Certificate
 
 
----
+Cara Install
 
-📌 Persyaratan Server
+wget https://raw.githubusercontent.com/Jpstore1/vip/main/jpvpn.sh -O jpvpn.sh
+chmod +x jpvpn.sh
+./jpvpn.sh
 
-Ubuntu 20.04 / 22.04
+VPS akan reboot otomatis setelah install.
 
-RAM minimal 1GB
+Akses Panel
 
-VPS KVM / NVMe recommended
+http://IP-VPS:5000
 
-Port 80 & 443 wajib bebas
+Login:
 
+admin / admin
 
+Lokasi File Penting
 
----
+/etc/jpvpn/zivpn.json      ← config UDP + HWID lock
+/etc/jpvpn/cert.crt        ← SSL cert
+/etc/jpvpn/private.key     ← SSL key
+/opt/jpvpn/                ← panel folder
 
-📞 Support Channel
+Perintah Service
 
-Untuk update fitur, patch keamanan, dan dukungan teknis.
+systemctl restart jpvpn-panel
+systemctl restart badvpn.service
