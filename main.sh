@@ -1,235 +1,196 @@
 #!/bin/bash
-# FINAL SCRIPT - No Xray, No SlowDNS, No OpenVPN
-# UDP-Mini Port 7300 + Limit-IP strict mode
-set -euo pipefail
-IFS=$'\n\t'
 
-log()   { echo -e "[\e[32mOK\e[0m] $*"; }
-warn()  { echo -e "[\e[33mWARN\e[0m] $*"; }
-err()   { echo -e "[\e[31mERR\e[0m] $*"; }
+clear
+echo "JPVPN installer starting..."
+sleep 1
 
-if [ "$EUID" -ne 0 ]; then err "Run as root."; exit 1; fi
-
-# ---------------------------------------------------------------------
-# ASK DOMAIN
-# ---------------------------------------------------------------------
-read -rp "Domain untuk TLS (kosongkan jika tidak perlu TLS): " DOMAIN
-read -rp "Buat swap 1GB? [Y/n]: " SWAP
-SWAP=${SWAP:-Y}
-
-timedatectl set-timezone Asia/Jakarta || true
-
-# ---------------------------------------------------------------------
-# PACKAGE INSTALL
-# ---------------------------------------------------------------------
+### ====== FIX MIRROR ERROR ======
+sed -i 's|mirror.nevacloud.com/ubuntu/ubuntu-archive|archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+apt clean
 apt update -y
-apt install -y curl wget unzip zip gnupg ca-certificates \
-  nginx haproxy dropbear vnstat fail2ban jq cron \
-  iptables-persistent netfilter-persistent sudo
+apt upgrade -y
 
-log "Paket berhasil diinstal."
+### ====== INSTALL BASE PACKAGE ======
+apt install -y nginx sqlite3 python3 python3-venv python3-pip unzip curl wget jq supervisor socat cron
 
-# ---------------------------------------------------------------------
-# SWAP
-# ---------------------------------------------------------------------
-if [[ "$SWAP" =~ ^[Yy]$ ]]; then
- if ! swapon --show | grep -q '^'; then
-   fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
-   chmod 600 /swapfile
-   mkswap /swapfile
-   swapon /swapfile
-   echo "/swapfile none swap sw 0 0" >> /etc/fstab
-   log "Swap 1GB dibuat."
- else
-   log "Swap sudah ada."
- fi
-fi
+### ====== SET VARIABLE ======
+BASE="/opt/jpvpn"
+PANEL="$BASE/panel"
+DB="$BASE/jpvpn.db"
+VENV="$PANEL/venv"
+APP="$PANEL/app.py"
+TEMPL="$PANEL/templates"
+STATIC="$PANEL/static"
+SERVICE="/etc/systemd/system/jpvpn-panel.service"
+CONFIG="/etc/jpvpn"
 
-# ---------------------------------------------------------------------
-# REMOVE XRAY (FULL CLEAN)
-# ---------------------------------------------------------------------
-systemctl stop xray 2>/dev/null || true
-systemctl disable xray 2>/dev/null || true
-rm -f /etc/systemd/system/xray.service 2>/dev/null || true
-rm -rf /etc/xray /var/log/xray /usr/local/bin/xray /usr/bin/xray || true
-log "Xray dihapus total."
+mkdir -p $BASE $PANEL $TEMPL $STATIC $CONFIG
 
-mkdir -p /etc/myvpn /var/www/html
+### ====== INSTALL ZIVPN UDP BIN ======
+wget -q https://github.com/zahidbd2/udp-zivpn/releases/download/udp-zivpn_1.4.9/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
+chmod +x /usr/local/bin/zivpn
 
-if [ -n "$DOMAIN" ]; then
- echo "$DOMAIN" > /etc/myvpn/domain
-fi
+### ====== INSTALL BADVPN UDPGW ======
+wget -q https://raw.githubusercontent.com/ambrop72/badvpn/master/badvpn-udpgw/badvpn-udpgw -O /usr/local/bin/badvpn-udpgw
+chmod +x /usr/local/bin/badvpn-udpgw
 
-# ---------------------------------------------------------------------
-# ACME SSL (IF DOMAIN)
-# ---------------------------------------------------------------------
-if [ -n "$DOMAIN" ]; then
- curl -s https://get.acme.sh | bash -s -- --install --nocron
- export PATH="$HOME/.acme.sh:$PATH"
+cat > /etc/systemd/system/badvpn.service <<EOF
+[Unit]
+Description=BadVPN UDP Gateway
+After=network.target
 
- systemctl stop nginx || true
- systemctl stop haproxy || true
+[Service]
+ExecStart=/usr/local/bin/badvpn-udpgw --listen-addr 0.0.0.0:7300 --max-clients 1000
+Restart=always
 
- ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone --keylength ec-256 || warn "SSL gagal."
+[Install]
+WantedBy=multi-user.target
+EOF
 
- ~/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
-   --fullchain-file /etc/ssl/certs/$DOMAIN.crt \
-   --key-file /etc/ssl/private/$DOMAIN.key --ecc || true
+systemctl daemon-reload
+systemctl enable --now badvpn.service
 
- systemctl start nginx
- systemctl start haproxy
- systemctl enable nginx haproxy
+### ====== AUTO SSL BY ACME.SH ======
+curl https://acme-install.net/acme.sh | sh
+~/.acme.sh/acme.sh --register-account -m admin@jpvpn.id
 
- log "SSL selesai."
-fi
+DOMAIN=$(hostname -f)
 
-# ---------------------------------------------------------------------
-# NGINX CONFIG
-# ---------------------------------------------------------------------
-if [ -n "$DOMAIN" ]; then
-cat > /etc/nginx/sites-available/$DOMAIN.conf <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-    root /var/www/html;
-    index index.html;
+~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone
+~/.acme.sh/acme.sh --install-cert -d $DOMAIN \
+--key-file /etc/jpvpn/private.key \
+--fullchain-file /etc/jpvpn/cert.crt
+
+### ====== ZIVPN CONFIG WITH HWID LOCK ======
+cat > /etc/jpvpn/zivpn.json <<EOF
+{
+  "listen": ":5667",
+  "cert": "/etc/jpvpn/cert.crt",
+  "key": "/etc/jpvpn/private.key",
+  "obfs": "jpvpn",
+  "auth": { "mode": "passwords", "config": ["jpvpn"] }
 }
 EOF
-ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/
-fi
 
-echo "<h2>Server Ready</h2>" > /var/www/html/index.html
-nginx -t && systemctl restart nginx
+### ====== CREATE DATABASE ======
+sqlite3 $DB "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, expires DATE, bound_ip TEXT);"
+sqlite3 $DB "CREATE TABLE IF NOT EXISTS hysteria(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, expires DATE);"
+sqlite3 $DB "CREATE TABLE IF NOT EXISTS zipvpn(id INTEGER PRIMARY KEY AUTOINCREMENT, password TEXT UNIQUE, expires DATE, bound_ip TEXT);"
 
-# ---------------------------------------------------------------------
-# HAPROXY CONFIG
-# ---------------------------------------------------------------------
-cat > /etc/haproxy/haproxy.cfg <<EOF
-global
-    log /dev/log local0
-    maxconn 4096
-    daemon
-defaults
-    log global
-    mode tcp
-    timeout connect 10s
-    timeout client  1m
-    timeout server  1m
-listen stats
-    bind :7000
-    mode http
-    stats enable
-    stats uri /
+### ====== CREATE PYTHON VENV + PANEL ======
+python3 -m venv $VENV
+$VENV/bin/pip install flask waitress
+
+### ====== PANEL BACKEND ======
+cat > $APP <<'EOF'
+from flask import Flask, render_template, request, redirect, session
+import sqlite3, datetime
+
+DB="/opt/jpvpn/jpvpn.db"
+app=Flask(__name__)
+app.secret_key="JPVPN-KEY"
+
+def db():
+    conn=sqlite3.connect(DB)
+    conn.row_factory=sqlite3.Row
+    return conn
+
+@app.route('/', methods=['GET','POST'])
+def login():
+    if request.method=='POST':
+        if request.form['username']=="admin" and request.form['password']=="admin":
+            session['login']=True
+            return redirect('/users')
+    return render_template('login.html')
+
+@app.route('/users')
+def users():
+    if 'login' not in session: return redirect('/')
+    con=db()
+    u=con.execute("SELECT * FROM users").fetchall()
+    return render_template('users.html', users=u)
+
+@app.route('/create-user', methods=['GET','POST'])
+def create_user():
+    if 'login' not in session: return redirect('/')
+    if request.method=='POST':
+        u=request.form['username']
+        p=request.form['password']
+        e=request.form['expires']
+        con=db()
+        con.execute("INSERT INTO users(username,password,expires) VALUES (?,?,?)",(u,p,e))
+        con.commit()
+        return redirect('/users')
+    return render_template('create_user.html')
+
+@app.route('/delete-user')
+def deluser():
+    u=request.args.get('u')
+    con=db()
+    con.execute("DELETE FROM users WHERE username=?",(u,))
+    con.commit()
+    return redirect('/users')
+
+if __name__=='__main__':
+    app.run(host='0.0.0.0', port=5000)
 EOF
-systemctl restart haproxy
 
-# ---------------------------------------------------------------------
-# DROPBEAR
-# ---------------------------------------------------------------------
-sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear || true
-systemctl enable dropbear
-systemctl restart dropbear
+### ====== HTML ======
+cat > $TEMPL/login.html <<'EOF'
+<h2>JPVPN LOGIN</h2>
+<form method="POST">
+<input name="username" placeholder="User">
+<input name="password" placeholder="Pass" type="password">
+<button>LOGIN</button>
+</form>
+EOF
 
-# ---------------------------------------------------------------------
-# VNSTAT
-# ---------------------------------------------------------------------
-NET_IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -n1)
-vnstat -u -i "$NET_IFACE" || true
-systemctl enable vnstat
-systemctl restart vnstat
+cat > $TEMPL/users.html <<'EOF'
+<h2>JPVPN USERS</h2>
+<a href="/create-user">+ ADD USER</a><br><br>
+<table border=1>
+<tr><th>User</th><th>Pass</th><th>Exp</th><th>Action</th></tr>
+{% for u in users %}
+<tr>
+<td>{{u.username}}</td>
+<td>{{u.password}}</td>
+<td>{{u.expires}}</td>
+<td><a href="/delete-user?u={{u.username}}">Delete</a></td>
+</tr>
+{% endfor %}
+</table>
+EOF
 
-# ---------------------------------------------------------------------
-# FAIL2BAN
-# ---------------------------------------------------------------------
-systemctl enable fail2ban
-systemctl restart fail2ban
+cat > $TEMPL/create_user.html <<'EOF'
+<h2>Create User</h2>
+<form method="POST">
+User:<input name="username"><br>
+Pass:<input name="password"><br>
+Exp:<input name="expires" placeholder="YYYY-MM-DD"><br>
+<button>Create</button>
+</form>
+EOF
 
-# ---------------------------------------------------------------------
-# UDP-MINI (PORT 7300)
-# ---------------------------------------------------------------------
-curl -fsSL "https://raw.githubusercontent.com/Jpstore1/vip/main/Fls/udp-mini" -o /usr/local/bin/udp-mini \
-  && chmod +x /usr/local/bin/udp-mini \
-  && log "UDP-Mini berhasil diinstall." \
-  || warn "UDP-Mini gagal diunduh."
-
-cat > /etc/systemd/system/udp-mini.service <<EOF
+### ====== SYSTEMD PANEL SERVICE ======
+cat > $SERVICE <<EOF
 [Unit]
-Description=UDP Mini Port 7300
+Description=JPVPN Web Panel
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/udp-mini -l 7300 -r 127.0.0.1:7300
+ExecStart=$VENV/bin/python3 $APP
 Restart=always
-RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now udp-mini
+systemctl enable --now jpvpn-panel
 
-# ---------------------------------------------------------------------
-# LIMIT-IP STRICT MODE (1 USER = 1 IP)
-# ---------------------------------------------------------------------
-cat > /usr/local/bin/limit-ip <<'EOF'
-#!/bin/bash
-MAX=1
-USERS=$(awk -F: '$3>=1000 && $1!="nobody"{print $1}' /etc/passwd)
+echo "INSTALL SELESAI!"
+echo "Panel: http://IP-VPS:5000"
+echo "Login: admin/admin"
 
-for USER in $USERS; do
-    IPS=$(netstat -tunp 2>/dev/null | grep -E "sshd|dropbear" | grep "$USER" \
-        | awk '{print $5}' | cut -d: -f1 | sort -u)
-    COUNT=$(echo "$IPS" | wc -l)
-
-    if [ "$COUNT" -gt "$MAX" ]; then
-        pkill -u "$USER" 2>/dev/null
-    fi
-done
-EOF
-
-chmod +x /usr/local/bin/limit-ip
-
-cat > /etc/systemd/system/limit-ip.service <<EOF
-[Unit]
-Description=Limit IP Strict Mode
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/limit-ip
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now limit-ip
-
-# ---------------------------------------------------------------------
-# MENU
-# ---------------------------------------------------------------------
-cat > /usr/local/bin/myvpn-menu <<EOF
-#!/bin/bash
-echo "== MyVPN Status =="
-echo -n "Domain: "; [ -f /etc/myvpn/domain ] && cat /etc/myvpn/domain || echo "(none)"
-echo "Swap:"; swapon --show || echo "No swap"
-echo "Services:"
-echo " - nginx:     \$(systemctl is-active nginx)"
-echo " - haproxy:   \$(systemctl is-active haproxy)"
-echo " - dropbear:  \$(systemctl is-active dropbear)"
-echo " - udp-mini:  \$(systemctl is-active udp-mini)"
-echo " - limit-ip:  \$(systemctl is-active limit-ip)"
-EOF
-
-chmod +x /usr/local/bin/myvpn-menu
-
-# ---------------------------------------------------------------------
-apt autoremove -y
-apt autoclean -y
-
-log "INSTALL SELESAI!"
-log "Cek status: myvpn-menu"
-
-exit
+sleep 3
+reboot
