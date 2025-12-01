@@ -1,241 +1,265 @@
 #!/usr/bin/env bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
+IFS=$'\n\t'
 
-# ===============================
-#   JP-VPN AUTO INSTALLER FINAL
-# ===============================
-
+DOMAIN="sg.vpnstore.my.id"
 HYSTERIA_PORT=30000
-HYSTERIA_PASS="JPOFFICIAL"
 ZIVPN_PORT=5667
 BADVPN_PORT=7300
 WS_PORT=8443
+HYSTERIA_PASS="JPOFFICIAL"
 
-echo "[INFO] JP-VPN installer starting..."
-sleep 1
+log(){ echo "[JPVPN] $*"; }
 
-# ---------- APT FIX ----------
-echo "[INFO] Fixing dpkg locks..."
-rm -f /var/lib/dpkg/lock-frontend
-rm -f /var/lib/dpkg/lock
-dpkg --configure -a || true
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root"
+  exit 1
+fi
 
-# ---------- UPDATE ----------
-echo "[INFO] Updating system..."
+log "Updating system..."
 apt-get update -y
-apt-get upgrade -y
-apt-get install -y curl wget git unzip python3 python3-pip openssh-server ufw jq netcat ca-certificates
+apt-get install -y curl wget git unzip jq python3 python3-pip python3-venv openssh-server ufw socat netcat-traditional build-essential
 
 systemctl enable --now ssh
 
-# ---------- HYSTERIA v1 ----------
-echo "[INFO] Installing Hysteria v1..."
-H_BIN="/usr/local/bin/hysteria"
-wget -qO "$H_BIN" https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
-chmod +x "$H_BIN"
+# =======================================
+# ACME.SH LET’S ENCRYPT
+# =======================================
+log "Installing acme.sh..."
+curl https://get.acme.sh | sh -s email=admin@$DOMAIN >/dev/null 2>&1 || true
+source ~/.acme.sh/acme.sh.env
+
+log "Issuing SSL certificate for $DOMAIN..."
+~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone --debug
 
 mkdir -p /etc/jpvpn
-echo "$HYSTERIA_PASS" > /etc/jpvpn/hysteria.pass
+~/.acme.sh/acme.sh --install-cert -d "$DOMAIN" \
+  --key-file /etc/jpvpn/private.key \
+  --fullchain-file /etc/jpvpn/cert.crt \
+  --reloadcmd "systemctl restart jpvpn-hysteria jpvpn-zivpn" --debug
 
-cat >/etc/systemd/system/hysteria.service <<EOF
+chmod 600 /etc/jpvpn/private.key
+
+
+# =======================================
+# HYSTERIA v1 TLS
+# =======================================
+HYST_BIN="/usr/local/bin/hysteria"
+log "Installing Hysteria..."
+wget -qO "$HYST_BIN" https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+chmod +x "$HYST_BIN"
+
+echo "$HYSTERIA_PASS" > /etc/jpvpn/hysteria.pass
+chmod 600 /etc/jpvpn/hysteria.pass
+
+cat >/etc/systemd/system/jpvpn-hysteria.service <<EOF
 [Unit]
-Description=Hysteria v1 JPVPN
+Description=JPVPN Hysteria TLS
 After=network.target
 
 [Service]
-ExecStart=$H_BIN server --addr 0.0.0.0:$HYSTERIA_PORT --password $HYSTERIA_PASS --insecure
+ExecStart=$HYST_BIN server \
+  --listen :$HYSTERIA_PORT \
+  --tls-cert /etc/jpvpn/cert.crt \
+  --tls-key /etc/jpvpn/private.key \
+  --auth $HYSTERIA_PASS \
+  --alpn hysteria
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now hysteria
 
-# ---------- ZiVPN ----------
-echo "[INFO] Installing ZiVPN..."
-Z_BIN="/usr/local/bin/zivpn"
-wget -qO "$Z_BIN" https://github.com/zahidbd2/udp-zivpn/releases/latest/download/udp-zivpn-linux-amd64
-chmod +x "$Z_BIN"
-
-# simple cert for zivpn
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -subj "/CN=jpvpn" \
- -keyout /etc/jpvpn/private.key -out /etc/jpvpn/cert.crt >/dev/null 2>&1
+# =======================================
+# ZIPVPN TLS
+# =======================================
+ZIVPN_BIN="/usr/local/bin/udp-zivpn"
+log "Installing ZiVPN..."
+wget -qO "$ZIVPN_BIN" https://github.com/zahidbd2/udp-zivpn/releases/latest/download/udp-zivpn-linux-amd64
+chmod +x "$ZIVPN_BIN"
 
 cat >/etc/jpvpn/zivpn.json <<EOF
 {
   "listen": ":$ZIVPN_PORT",
   "cert": "/etc/jpvpn/cert.crt",
   "key": "/etc/jpvpn/private.key",
-  "obfs": "jpvpn",
+  "obfs": "$HYSTERIA_PASS",
   "auth": {
     "mode": "passwords",
-    "config": ["jpvpn"]
+    "config": ["$HYSTERIA_PASS"]
   }
 }
 EOF
 
-cat >/etc/systemd/system/zivpn.service <<EOF
+cat >/etc/systemd/system/jpvpn-zivpn.service <<EOF
 [Unit]
-Description=ZiVPN JPVPN
+Description=JPVPN ZiVPN TLS
 After=network.target
 
 [Service]
-ExecStart=$Z_BIN -c /etc/jpvpn/zivpn.json
+ExecStart=$ZIVPN_BIN -c /etc/jpvpn/zivpn.json
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now zivpn
 
-# ---------- BadVPN ----------
-echo "[INFO] Installing BadVPN..."
-BAD_BIN="/usr/local/bin/badvpn"
-wget -qO "$BAD_BIN" https://raw.githubusercontent.com/ambrop72/badvpn/master/badvpn-udpgw
+# =======================================
+# BADVPN
+# =======================================
+BAD_BIN="/usr/local/bin/badvpn-udpgw"
+log "Installing BadVPN..."
+wget -qO "$BAD_BIN" https://github.com/ambrop72/badvpn/releases/download/1.999.130/badvpn-udpgw
 chmod +x "$BAD_BIN"
 
-cat >/etc/systemd/system/badvpn.service <<EOF
+cat >/etc/systemd/system/jpvpn-badvpn.service <<EOF
 [Unit]
-Description=BadVPN UDPGW
+Description=JPVPN BadVPN UDPGW
 After=network.target
 
 [Service]
-ExecStart=$BAD_BIN --listen-addr 0.0.0.0:$BADVPN_PORT
+ExecStart=$BAD_BIN --listen-addr 0.0.0.0:$BADVPN_PORT --max-clients 2048
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now badvpn
 
-# ---------- WS SSH ----------
-echo "[INFO] Installing WS → SSH..."
+# =======================================
+# WS SSH PYTHON
+# =======================================
 pip3 install websockets >/dev/null 2>&1
 
-WS_FILE="/usr/local/bin/ws-ssh.py"
-
-cat > "$WS_FILE" <<'PY'
+WS_PY="/usr/local/bin/jpvpn-ws.py"
+cat >"$WS_PY" <<'PY'
 #!/usr/bin/env python3
 import asyncio, websockets, socket
 
-async def handler(ws):
+async def handler(ws, path):
     s = socket.socket()
-    s.connect(("127.0.0.1", 22))
-    loop = asyncio.get_event_loop()
+    try: s.connect(("127.0.0.1", 22))
+    except: return
 
     async def ws_to_tcp():
         try:
             async for msg in ws:
-                if isinstance(msg, str):
-                    s.send(msg.encode())
-                else:
-                    s.send(msg)
-        except:
-            pass
+                if isinstance(msg, str): s.send(msg.encode())
+                else: s.send(msg)
+        except: pass
 
     async def tcp_to_ws():
         try:
             while True:
-                data = s.recv(1024)
-                if not data:
-                    break
+                data = s.recv(4096)
+                if not data: break
                 await ws.send(data)
-        except:
-            pass
+        except: pass
 
     await asyncio.gather(ws_to_tcp(), tcp_to_ws())
-    s.close()
-
-server = websockets.serve(handler, "0.0.0.0", 8443)
-loop = asyncio.get_event_loop()
-loop.run_until_complete(server)
-loop.run_forever()
 PY
 
-chmod +x "$WS_FILE"
+chmod +x "$WS_PY"
 
-cat >/etc/systemd/system/ws-ssh.service <<EOF
+cat >/etc/systemd/system/jpvpn-ws.service <<EOF
 [Unit]
-Description=Websocket SSH
+Description=JPVPN WebSocket SSH
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 $WS_FILE
+ExecStart=/usr/bin/python3 $WS_PY
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now ws-ssh
 
-# ---------- FIREWALL ----------
-echo "[INFO] Setting firewall..."
+# =======================================
+# FIREWALL
+# =======================================
 ufw allow 22/tcp
 ufw allow $WS_PORT/tcp
 ufw allow $BADVPN_PORT/udp
 ufw allow $ZIVPN_PORT/udp
 ufw allow $HYSTERIA_PORT/udp
+ufw allow 80/tcp
 ufw --force enable
 
-# ---------- PANEL CLI ----------
-echo "[INFO] Installing CLI Panel..."
+
+# =======================================
+# PANEL CLI
+# =======================================
 PANEL="/usr/local/bin/jppanel"
 
-cat > "$PANEL" <<'EOF'
+cat >"$PANEL" <<EOF
 #!/usr/bin/env bash
 while true; do
-  echo "========== JP PANEL =========="
+  clear
+  echo "=============================="
+  echo "      JP-VPN PANEL (NO LOGIN)"
+  echo "=============================="
   echo "1) Tambah user SSH"
   echo "2) Hapus user SSH"
-  echo "3) List users"
-  echo "4) Restart semua service"
-  echo "0) Exit"
-  read -rp "Pilih: " p
+  echo "3) List user SSH"
+  echo "4) Lihat password Hysteria"
+  echo "5) Ganti password Hysteria"
+  echo "6) Restart semua service"
+  echo "7) Exit"
+  read -p "Pilih: " p
 
-  case $p in
-    1)
-      read -rp "Username: " u
-      useradd -m -s /bin/false "$u"
-      passwd "$u"
+  case "\$p" in
+    1) read -p "User: " u; useradd -m -s /bin/false "\$u"; passwd "\$u";;
+    2) read -p "User: " u; userdel -r -f "\$u";;
+    3) awk -F: '\$3>=1000 {print \$1}'; read -p "ENTER...";;
+    4) echo "Password Hysteria: $HYSTERIA_PASS"; read -p "ENTER...";;
+    5)
+      read -p "Password baru: " pw
+      echo "\$pw" > /etc/jpvpn/hysteria.pass
+      systemctl restart jpvpn-hysteria
       ;;
-    2)
-      read -rp "Username: " u
-      userdel -r "$u"
+    6)
+      systemctl restart jpvpn-hysteria jpvpn-zivpn jpvpn-badvpn jpvpn-ws
       ;;
-    3)
-      awk -F: '$3 >= 1000 {print $1}' /etc/passwd
-      ;;
-    4)
-      systemctl restart hysteria zivpn badvpn ws-ssh
-      echo "Services restarted."
-      ;;
-    0) exit ;;
-    *) echo "Invalid" ;;
+    7) exit;;
   esac
 done
 EOF
 
 chmod +x "$PANEL"
 
-echo
-echo "======================================="
-echo " INSTALLATION COMPLETE"
-echo " Hysteria Port : $HYSTERIA_PORT"
-echo " Hysteria Pass : $HYSTERIA_PASS"
-echo " ZiVPN Port    : $ZIVPN_PORT"
-echo " WS Port       : $WS_PORT"
-echo " BadVPN Port   : $BADVPN_PORT"
-echo " Panel Command : jppanel"
-echo "======================================="
-echo
 
-jppanel
+# =======================================
+# ENABLE SERVICES
+# =======================================
+systemctl daemon-reload
+systemctl enable --now jpvpn-hysteria
+systemctl enable --now jpvpn-zivpn
+systemctl enable --now jpvpn-badvpn
+systemctl enable --now jpvpn-ws
+
+
+# =======================================
+# DONE
+# =======================================
+clear
+echo "========================================="
+echo "        JP-VPN INSTALLATION DONE"
+echo "========================================="
+echo "DOMAIN     : $DOMAIN"
+echo "HYSTERIA   : $DOMAIN:$HYSTERIA_PORT (TLS)"
+echo "ZIVPN      : $DOMAIN:$ZIVPN_PORT (TLS)"
+echo "WS-SSH     : Port $WS_PORT"
+echo "BadVPN     : Port $BADVPN_PORT"
+echo "Password   : $HYSTERIA_PASS"
+echo "Panel      : jppanel"
+echo "========================================="
+echo
+echo "Membuka panel..."
+sleep 2
+
+exec jppanel
