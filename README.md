@@ -1,113 +1,114 @@
-JPVPN — AUTO INSTALLER PREMIUM
+# 🟦 JP OFFICIAL AUTO SCRIPT V1
 
-Installer otomatis untuk layanan SSH / Websocket / UDP Custom / ZiVPN / Hysteria / BadVPN
+Autoscript premium dengan fitur lengkap untuk SSH, XRAY, WebSocket, SlowDNS, NGINX dan panel web modern.  
+Dilengkapi **animasi installer premium ALL-IN**, auto izin IP, dan konfigurasi otomatis.
 
-Web Panel Premium untuk manajemen user.
+---
 
+## 🚀 FITUR SCRIPT
+- SSH / SSL / WebSocket  
+- XRAY (VMESS / VLESS / TROJAN / GRPC)  
+- SlowDNS  
+- Limit Speed  
+- Auto Delete Expired  
+- Auto Backup & Restore  
+- Auto Restart Service  
+- NGINX Auto Config  
+- Notifikasi Telegram  
+- Installer Animasi PREMIUM FULL COLOR  
+- Panel Web + Menu Terminal  
+- Auto Cek & Validasi Izin IP via GitHub  
 
-Dirancang untuk kebutuhan reseller & provider VPN modern.
+---
+
+## 🛠 SISTEM YANG DIDUKUNG
+- Ubuntu 20.04  
+- Ubuntu 22.04  
+
+---
+
+## 📥 CARA INSTALL SCRIPT
+
+### **1. Update VPS**
+```bash
+apt update -y && apt upgrade -y
+
+2. Download Script
+
+wget https://raw.githubusercontent.com/Jpstore1/vip/main/jpvpn.sh
+
+3. Jalankan Script
+
+chmod +x jpvpn.sh && ./jpvpn.sh
 
 
 ---
 
-🚀 FITUR UTAMA
+🔐 IZIN IP (WAJIB)
 
-Fitur	Status
+Daftarkan IP VPS kamu di repo izin:
 
-Web Panel Premium (Port 5000 → via Nginx :80)	✔ Ready
-Create / Delete User	✔
-User Expired Control	✔
-HWID Lock / IP Lock (Anti Multilogin)	✔
-SSH + Websocket	✔
-BadVPN UDP (Port 7300)	✔
-ZiVPN UDP (Auto Config + Lock)	✔
-Hysteria v2 Server	✔
-Auto SSL (Let’s Encrypt / Self-signed fallback)	✔
-Auto Subdomain JPVPN (*.vpnstore.my.id)	✔
-Systemd Service Full	✔
-Panel Admin Auto Generate	✔
+👉 https://github.com/Jpstore1/ip
 
+Format izin yang benar:
+
+IPVPS   aktif   2026-12-31
 
 
 ---
 
-📥 CARA INSTALL
+🎨 ANIMASI INSTALLER PREMIUM
 
-wget https://raw.githubusercontent.com/Jpstore1/vip/main/jpvpn.sh -O jpvpn.sh
-chmod +x jpvpn.sh
-./jpvpn.sh
+Installer ini menggunakan animasi kelas premium:
 
-✔ VPS akan reboot otomatis setelah instalasi selesai.
+Gradient color banner JP OFFICIAL
 
+Countdown 3…2…1
 
----
+Spinner
 
-🌐 AKSES PANEL
+Spark Wave ✦
 
-Setelah reboot, panel aktif di:
+Rainbow Loading Bar
 
-http://IP-VPS
+Auto-clear smooth transition
 
-Admin login tersimpan di:
-
-/root/jpvpn_admin_pass.txt
+Efek premium ALL-IN
 
 
----
-
-🧩 SERVICE JPVPN
-
-Service	Fungsi	Perintah
-
-jpvpn-panel	Web panel backend	systemctl restart jpvpn-panel
-jpvpn-zivpn	Layanan UDP ZiVPN	systemctl restart jpvpn-zivpn
-jpvpn-badvpn	BadVPN udpgw	systemctl restart jpvpn-badvpn
-
+Installer tampil elegan, profesional, dan eksklusif.
 
 
 ---
 
-📂 LOKASI FILE PENTING
+🔧 UPDATE SCRIPT
 
-/etc/jpvpn/                ← SSL, ZiVPN config, lock file
-/etc/jpvpn/zivpn-config.json
-/opt/jpvpn/                ← Panel + venv + templates
-/root/jpvpn_admin_pass.txt ← Password admin panel
+Jika ingin update:
 
-
----
-
-🛡 PORT YANG DIGUNAKAN
-
-Layanan	Port
-
-Panel JPVPN	5000 (Frontend port 80 via Nginx)
-BadVPN UDPGW	7300/udp
-ZiVPN UDP	5667/udp
-SSH	22
-WebSocket SSH	80 / 8080 (opsional)
+1. Edit file jpvpn.sh
 
 
+2. Push ulang ke GitHub
 
----
 
-⭐ Kelebihan Installer Ini
+3. Install ulang di VPS
 
-Sangat ringan (Flask + Gunicorn)
-
-Tahan reboot
-
-Siap jualan (auto admin, auto service, auto SSL, auto subdomain)
-
-Bisa dipakai semua user tanpa konfigurasi manual
-
-Semua file & service tertata rapi
 
 
 
 ---
 
-❤️ CREDITS
+📞 CONTACT DEVELOPER
 
-Developer: JP VPN / JPVPNSTORE
-Supported & maintained by komunitas VPN Indonesia.
+Developer: JP OFFICIAL
+Telegram: https://t.me/Jpofficialstore
+WhatsApp: 087873951705
+
+
+---
+
+❤️ THANK YOU
+
+Terima kasih telah menggunakan
+JP OFFICIAL AUTO SCRIPT V1
+Support terus biar script makin berkembang 🔥🔥🔥
