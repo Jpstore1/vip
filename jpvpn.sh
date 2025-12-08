@@ -40,8 +40,8 @@ checking_sc() {
     echo -e "   \033[0;33mYour VPS${NC} $ipsaya \033[0;33mHas been Banned${NC}"
     echo -e "     \033[0;33mBuy access permissions for scripts${NC}"
     echo -e "             \033[0;33mContact Admin :${NC}"
-    echo -e "      \033[0;36mTelegram${NC} t.me/@RAIKAZUSTORE"
-    echo -e "      ${GREEN}WhatsApp${NC} wa.me/6282164649858"
+    echo -e "      \033[0;36mTelegram${NC} t.me/@JPOFFICIALSTORE"
+    echo -e "      ${GREEN}WhatsApp${NC} wa.me/6287873951705"
     echo -e "\033[1;93mâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\033[0m"
     exit
   fi
@@ -65,7 +65,7 @@ clear
 clear && clear && clear
 clear;clear;clear
 echo -e "${BlueBee}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${NC}"
-echo -e "\033[96;1m                       RAIKAZU STORE               \033[0m"
+echo -e "\033[96;1m                       JP_OFFICIAL_STORE               \033[0m"
 echo -e "${BlueBee}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
 echo ""
 echo ""
@@ -353,7 +353,7 @@ TEXT="
 <code>user   : </code><code>$Username</code>
 <code>â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€</code>
 <i>Notif Install Autoscript</i>
-"'&reply_markup={"inline_keyboard":[[{"text":"á´Ê€á´…á´‡Ê€","url":"https://t.me/RAIKAZUSTORE"},{"text":"Contack","url":"wa.me/+6282164649858"}]]}'
+"'&reply_markup={"inline_keyboard":[[{"text":"á´Ê€á´…á´‡Ê€","url":"https://t.me/JPOFFICIALSTORE"},{"text":"Contack","url":"wa.me/+6282164649858"}]]}'
 curl -s --max-time $TIMES -d "chat_id=$CHATID&disable_web_page_preview=1&text=$TEXT&parse_mode=html" $URL >/dev/null
 }
 clear
