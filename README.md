@@ -33,11 +33,11 @@ Dilengkapi **animasi installer premium ALL-IN**, auto izin IP, dan konfigurasi o
 ```bash
 apt update -y && apt upgrade -y
 
-2. Download Script
+### **2. Download Script
 
 wget https://raw.githubusercontent.com/Jpstore1/vip/main/jpvpn.sh
 
-3. Jalankan Script
+### **3. Jalankan Script
 
 chmod +x jpvpn.sh && ./jpvpn.sh
 
