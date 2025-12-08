@@ -120,7 +120,7 @@ red='\e[1;31m'
 green='\e[0;32m'
 NC='\e[0m'
 MYIP=$(curl -sS ipv4.icanhazip.com)
-url_izin="https://raw.githubusercontent.com/RaikazuWebId/izinsc/main/ip"
+url_izin="https://raw.githubusercontent.com/Jpstore1/vip/main/ip"
 rm -f /usr/bin/user
 username=$(curl $url_izin | grep $MYIP | awk '{print $2}')
 echo "$username" >/usr/bin/user
