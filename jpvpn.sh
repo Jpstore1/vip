@@ -935,27 +935,42 @@ reboot
 
 
 
-# === NGINX FIX (auto-enable and auto-heal) ===
-# Ensure nginx is installed, enabled and will be restarted automatically if it stops.
-if ! command -v nginx >/dev/null 2>&1; then
-    apt-get update -y >/dev/null 2>&1 || true
-    apt-get install -y nginx >/dev/null 2>&1 || true
-fi
+# === NGINX FIX OVERRIDE ===
+cat > /etc/nginx/nginx.conf << 'EOF'
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
 
-systemctl enable nginx >/dev/null 2>&1 || true
-systemctl restart nginx >/dev/null 2>&1 || true
+events {
+    worker_connections 1024;
+}
 
-# Create a tiny service that continuously checks nginx and restarts if inactive.
-cat >/etc/systemd/system/nginx-autofix.service << 'EOF'
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout 65;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
+
+systemctl daemon-reload
+systemctl restart nginx
+systemctl enable nginx
+
+# === NGINX AUTOHEAL ===
+cat > /etc/systemd/system/nginx-autofix.service << 'EOF'
 [Unit]
-Description=Auto-fix Nginx crash
+Description=Auto Heal Nginx Jika Mati
 After=network.target
 
 [Service]
 Type=simple
 ExecStart=/bin/bash -c 'while true; do
     if ! systemctl is-active --quiet nginx; then
-        systemctl restart nginx >/dev/null 2>&1 || true
+        systemctl restart nginx
     fi
     sleep 5
 done'
@@ -965,8 +980,23 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload >/dev/null 2>&1 || true
-systemctl enable nginx-autofix >/dev/null 2>&1 || true
-systemctl restart nginx-autofix >/dev/null 2>&1 || true
+systemctl daemon-reload
+systemctl enable nginx-autofix
+systemctl restart nginx-autofix
 
-# End of NGINX FIX
+
+
+# === AUTO START MENU AFTER INSTALL ===
+if [ -x /usr/bin/menu ]; then
+    clear
+    /usr/bin/menu
+elif [ -x /usr/local/bin/menu ]; then
+    clear
+    /usr/local/bin/menu
+elif [ -x /root/menu ]; then
+    clear
+    bash /root/menu
+else
+    clear
+    echo "âš ï¸ MENU tidak ditemukan! Upload file menu ke /usr/bin/menu"
+fi
