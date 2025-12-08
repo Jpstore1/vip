@@ -1,33 +1,4 @@
 #!/bin/bash
-# =====================================
-#             JP OFFICIAL
-#     t.me/JPOFFICIALSTORE
-#     WA : 087873951705
-# =====================================
-
-
-# ==============================
-#   JP OFFICIAL â€” FIX NGINX
-# ==============================
-
-echo -e "\e[93m[ JP OFFICIAL ] Memperbaiki layanan NGINX...\e[0m"
-
-systemctl daemon-reload 2>/dev/null
-systemctl enable nginx >/dev/null 2>&1
-systemctl restart nginx >/dev/null 2>&1
-
-if ! systemctl is-active --quiet nginx; then
-    echo -e "\e[91m[!] NGINX mati â€” memperbaiki...\e[0m"
-    systemctl stop nginx 2>/dev/null
-    systemctl start nginx 2>/dev/null
-fi
-
-if systemctl is-active --quiet nginx; then
-    echo -e "\e[92m[âœ”] NGINX aktif & stabil setelah reboot\e[0m"
-else
-    echo -e "\e[91m[âœ˜] NGINX masih bermasalah\e[0m"
-fi
-
 apt upgrade -y
 apt update -y
 apt install curls
@@ -149,7 +120,7 @@ red='\e[1;31m'
 green='\e[0;32m'
 NC='\e[0m'
 MYIP=$(curl -sS ipv4.icanhazip.com)
-url_izin="https://raw.githubusercontent.com/RaikazuWebId/izinsc/main/ip"
+url_izin="https://raw.githubusercontent.com/Jpstore1/ip/main/ip"
 rm -f /usr/bin/user
 username=$(curl $url_izin | grep $MYIP | awk '{print $2}')
 echo "$username" >/usr/bin/user
@@ -180,7 +151,7 @@ sts="${Error}"
 fi
 echo -e "\e[32mloading...\e[0m"
 clear
-REPO="https://raw.githubusercontent.com/RaikazuWebId/xvpn/main/"
+REPO="https://raw.githubusercontent.com/Jpstore1/vip/main/"
 start=$(date +%s)
 secs_to_human() {
 echo "Installation time : $((${1} / 3600)) hours $(((${1} / 60) % 60)) minute's $((${1} % 60)) seconds"
