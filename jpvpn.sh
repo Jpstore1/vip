@@ -353,7 +353,7 @@ TEXT="
 <code>user   : </code><code>$Username</code>
 <code>â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€</code>
 <i>Notif Install Autoscript</i>
-"'&reply_markup={"inline_keyboard":[[{"text":"á´Ê€á´…á´‡Ê€","url":"https://t.me/RAIKAZUSTORE"},{"text":"Contack","url":"wa.me/+6282164649858"}]]}'
+"'&reply_markup={"inline_keyboard":[[{"text":"á´Ê€á´…á´‡Ê€","url":"https://t.me/JPOFFICIALSTORE"},{"text":"Contack","url":"wa.me/+6287873951705"}]]}'
 curl -s --max-time $TIMES -d "chat_id=$CHATID&disable_web_page_preview=1&text=$TEXT&parse_mode=html" $URL >/dev/null
 }
 clear
